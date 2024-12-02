@@ -2,14 +2,14 @@
 Contributors: wphostingdev, iverok, perwilhelmsen, nikolaidev, lassepladsen
 Tags: woocommerce, vipps, mobilepay
 Tags: woocommerce, vipps
-Version: 3.0.6
-Stable tag: 3.0.6
+Version: 3.0.7
+Stable tag: 3.0.7
 Requires at least: 6.2
-Tested up to: 6.7.0
+Tested up to: 6.7.1
 Requires PHP: 7.0
 Requires Plugins: woocommerce
 WC requires at least: 3.3.4
-WC tested up to: 9.4.0
+WC tested up to: 9.4.2
 License: MIT
 License URI: https://choosealicense.com/licenses/mit/
 Official Vipps MobilePay payment plugin for WooCommerce.
@@ -94,6 +94,7 @@ Shareable links and QR codes can be generated from the Vipps tab on the product 
 This project is hosted on Github at: https://github.com/vippsas/vipps-woocommerce
 
 == Upgrade Notice ==
+Version 3.0.7 If an order has been edited so that its value is less than the reserved amount, cancel the rest of the reserved amount after capture
 Version 3.0.6 Fixes the problem caused by the 3.0.5 fix that disabled Vipps Checkout
 Version 3.0.5 Fixes compatibility issues with Checkout, Checkout for Recurring, WooCommerce Subscriptions and Gutenberg Checkout block
 In version 3.0.0  we are introducing an all-new settings screen reached from the Vipps Mobilpay menu. The old settings page will redirect to this. It should look and feel familiar, but we're going to use this page to hopefully improve the co nfiguraton experience as the features improve and the settings grow more complicated.
@@ -241,6 +242,14 @@ From version 1.1.13 you can also modify the javascript using the new WP hooks li
  * 'vippsStatusCheckErrorHandler' - A filter that should return function taking a statustext and an error object. It receives the default error handler, and is called when checking the order status with ajax for some reason ends up in an error.
 
 == Changelog ==
+= 2024-12-02 version 3.0.7 =
+If an order has been edited so that its value is less than the reserved amount, cancel the rest of the reserved amount after capture
+Also, if an order that has not been captured yet needs repayment (in the Processing state) we now allow this. The money can only be refunded after capture, but in this case we will release the "refunded" money as soon as the order has been set to "complete".
+The On-Site messaging badge block will now use the 3.0 Block API
+
+Change epayment_cancel_payment logic to match documentation
+Update the Badge block to the latest specifications and enable it for MobilePay
+
 = 2024-11-18 version 3.0.6 =
 Two extremely dumb errors fixed that interacted with 3.0.5 to disable Vipps Checkout. Sorry.
 
