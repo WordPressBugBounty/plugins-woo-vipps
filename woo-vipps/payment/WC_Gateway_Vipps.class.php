@@ -958,6 +958,7 @@ class WC_Gateway_Vipps extends WC_Payment_Gateway {
                     'description' => sprintf(__("%1\$s is a new service from %2\$s which replaces the usual WooCommerce checkout page entirely, replacing it with a simplified checkout screen providing payment both with %2\$s and credit card. Additionally, your customers will get the option of providing their address information using their %2\$s app directly.", 'woo-vipps'), Vipps::CheckoutName(), Vipps::CompanyName()),
                     ),
 
+
                 'vipps_checkout_enabled' => array(
                     'title'       => sprintf(__('Activate Alternative %1$s', 'woo-vipps'), Vipps::CheckoutName()),
                     'label'       => sprintf(__('Enable Alternative %1$s screen, replacing the standard checkout page', 'woo-vipps'), Vipps::CheckoutName()),
@@ -974,14 +975,14 @@ class WC_Gateway_Vipps extends WC_Payment_Gateway {
                         'default'     => $vippscreateuserdefault,
                         ),
 
-
-                'enablestaticshipping_checkout' => array(
+            'enablestaticshipping_checkout' => array(
                         'title'       => sprintf(__('Enable static shipping for %1$s', 'woo-vipps'), Vipps::CheckoutName()),
                         'label'       => __('Enable static shipping', 'woo-vipps'),
                         'type'        => 'checkbox',
                         'description' => sprintf(__('If your shipping options do not depend on the customers address, you can enable \'Static shipping\', which will precompute the shipping options when using %1$s so that this will be much faster. If you do this and the customer isn\'t logged in, the base location of the store will be used to compute the shipping options for the order. You should only use this if your shipping is actually \'static\', that is, does not vary based on the customers address. So fixed price/free shipping will work. If the customer is logged in, their address as registered in the store will be used, so if your customers are always logged in, you may be able to use this too.', 'woo-vipps'), Vipps::CheckoutName()),
                         'default'     => $default_static_shipping_for_checkout
                         ),
+
 
                 'requireUserInfo_checkout' => array(
                         'title'       => __('Ask the user to consent to share user information', 'woo-vipps'),
@@ -1057,6 +1058,7 @@ class WC_Gateway_Vipps extends WC_Payment_Gateway {
                         'description' => sprintf(__('Activate this for Porterbuddy as a %1$s Shipping method. Your store address will be used as the pick-up point and your admin email will be used for booking information from Porterbuddy.' ,'woo-vipps'), Vipps::CheckoutName()),
                         'default'     => 'no'
                     ),
+
                 'vcs_porterbuddy_publicToken' => array(
                         'title' => __('Porterbuddy public token', 'woo-vipps'),
                         'class' => 'vippspw vcs_porterbuddy vcs_depend',
@@ -1137,7 +1139,7 @@ class WC_Gateway_Vipps extends WC_Payment_Gateway {
                            'title' => sprintf(__('External Payment Methods', 'woo-vipps'), Vipps::CheckoutName()),
                            'type'  => 'title',
                            'description' => sprintf(__("Allow certain external payment methods in %1\$s, returning control to WooCommerce for the order", 'woo-vipps'), Vipps::CheckoutName())
-                           )
+                   ),
                ];
                foreach($externals as $k => $def)   $external_payment_fields[$k] = $def;
            }
@@ -1481,7 +1483,7 @@ class WC_Gateway_Vipps extends WC_Payment_Gateway {
                     'default'     => '',
                     ),
             );
-
+        
        // Add all the standard fields
        foreach($mainfields as $key=>$field) {
           $this->form_fields[$key] = $field;
@@ -1519,6 +1521,8 @@ class WC_Gateway_Vipps extends WC_Payment_Gateway {
                $this->form_fields['testmode']['description'] .= '<br><b>' . __('VIPPS_TEST_MODE is set to true in your configuration - test mode is forced', 'woo-vipps') . "</b>";
            }
        }
+
+
     }
 
 
@@ -3874,23 +3878,47 @@ function activate_vipps_checkout(yesno) {
     // delete all the ones pointing wrong. If this returns false, you should reinitialize the webhooks. IOK 2023-12-20
     public function check_webhooks () {
         $local_hooks = get_option('_woo_vipps_webhooks');
+        if (!$local_hooks) return false;
+
         $callback = $this->webhook_callback_url();
         $callback_compare = strtok($callback, '?');
         $problems = false;
 
-        if (!$local_hooks) return false;
-        foreach($local_hooks as $msn => $hooks) {
-           foreach ($hooks as $id => $hook) {
+        // We are going to re-initialize our webhooks after this, but just to ensure we're not keeping any 'stale' hooks,
+        // we'll update the local hooks too. IOK 2025-02-13
+        $change = false;
+        $msns = array_keys($local_hooks);
+        foreach($msns as $msn) {
+           $hooks = $local_hooks[$msn];
+           $ids = array_keys($hooks);
+           foreach ($ids as $id) {
+               $hook = $hooks[$id];
                $noargs = strtok($hook['url'], '?');
                if ($noargs == $callback_compare) continue; // This hook is good, probably, unless somebody has deleted it
                try {
+                   $this->log(sprintf(__("For msn %s we have a webhook %s %s which is pointed the wrong way (%s) for this website", 'woo-vipps'), $msn, $hook['id'], $hook['url'], $callback_compare));
                    $this->api->delete_webhook($msn, $hook['id']); // This isn't - it's pointed the wrong way, which means we have changed name of the site or something
                } catch (Exception $e) {
                    $this->log(sprintf(__("Could not delete webhook for this site with url '%2\$s' : %1\$s", 'woo-vipps'), $e->getMessage(), $noargs), 'error');
                }
+               unset($hooks[$id]);
+               $change = true;
                $problems = true;
            }
+           
+           if ($change) {
+               if (empty($hooks)) { 
+                 unset($local_hooks[$msn]);
+               } else {
+                 $local_hooks[$msn] = $hooks;
+               }
+           }
         }
+
+        if ($change) {
+           update_option('_woo_vipps_webhooks', $local_hooks, true);
+        }
+
         if ($problems) return false;
         return true;
     }
