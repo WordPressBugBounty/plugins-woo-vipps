@@ -2832,6 +2832,17 @@ else:
         // This filter is used in sub-functions to keep track of what we are calculating for, without having to set globals or pass arguments. IOK 2025-08-14
         if ($ischeckout) add_filter('woo_vipps_is_vipps_checkout', '__return_true');
 
+        // We may have an address already in the Order, and no *new* address, when recalculating shipping options after modifying the order.
+        // We'll still create a $vippsdata struct so that old filters can do whatever is neccessary. IOK 2025-09-16
+        $new_address = !empty($vippsdata);
+        if (!$new_address) {
+            $vippsdata['addressLine1'] =  $order->get_shipping_address_1();
+            $vippsdata['addressLine2'] =  $order->get_shipping_address_2();
+            $vippsdata['postCode'] = $order->get_shipping_postcode();
+            $vippsdata['city'] = $order->get_shipping_city();
+            $vippsdata['country'] = $order->get_shipping_country();
+        }
+
        // Since we have legacy users that may have filters defined on these values, we will translate newer apis to the older ones.
        // so filters will continue to work for newer apis/checkout
        if (isset($vippsdata['streetAddress'])){
@@ -2858,10 +2869,9 @@ else:
         $city = $vippsdata['city'];
         $postcode= $vippsdata['postCode'];
 
-        if (false && $ischeckout && preg_match("!Sofienberggata 12!", $addressline1)) {
-            // Default address used to produce a proforma set of shipping options in Vipps Checkout. IOK 2023-07-28
-            // This is subject to change and is currently inactive
-        } else {
+        // Old code here treated "Sofienberggata 12" as a special Vipps pro-forma address; this is no longer necessary.
+        // If we have gotten a new address from Express or Checkout, update the order. IOK 2025-09-16.
+        if ($new_address) {
             $order->set_billing_address_1($addressline1);
             $order->set_billing_address_2($addressline2);
             $order->set_billing_city($city);
@@ -2876,6 +2886,8 @@ else:
         }
 
         // This is *essential* to get VAT calculated correctly. That calculation uses the customer, which uses the session.IOK 2019-10-25
+        // We don't *save* this to the customer, because this may happen in a callback from Checkout where the customers' session is live and
+        // the address info is from Checkout (and not necessarily the customers real address). IOK 2025-09-12
         if (WC()->customer) {  
             WC()->customer->set_billing_location($country,'',$postcode,$city);
             WC()->customer->set_shipping_location($country,'',$postcode,$city);
@@ -2913,6 +2925,17 @@ else:
             $no_shipping_taxes = WC_Tax::calc_shipping_tax('0', $shipping_tax_rates);
             $shipping_methods['none_required:0'] = new WC_Shipping_Rate('none_required:0',__('No shipping required','woo-vipps'),0,$no_shipping_taxes, 'none_required', 0);
         } else {
+            // Ensure the shipping packages we use has the current order address IOK 2025-09-12
+            $destination = [ 'country' => $country, 'state' => '', 'postcode' => $postcode, 'city'=> $city, 'address' => $addressline1, 'address_1' => $addressline1, 'address_2' => $addressline2 ];
+            add_filter('woocommerce_cart_shipping_packages', function ($packages)  use($destination) {
+               $new = [];
+               foreach($packages as $package) {
+                   $package['destination'] =  $destination;
+                   $new[] = $package;
+               }
+               return $new;
+            });
+
             $packages = apply_filters('woo_vipps_shipping_callback_packages', WC()->cart->get_shipping_packages());
             $shipping =  WC()->shipping->calculate_shipping($packages);
 
@@ -3016,20 +3039,25 @@ else:
         $methods_classes = WC()->shipping->get_shipping_method_class_names();
         $methods_classes['pickup_location'] = 'Automattic\WooCommerce\Blocks\Shipping\PickupLocation'; // Loaded using the "load" hook, after the registered methods, so we need to add it specially.
 
+        $has_free_shipping = false;
         foreach($methods as $method) {
            $rate = $method['rate'];
+           $methodid = $rate->get_method_id();
 
            // Extended settings are stored in these objects
-           $methodclass = $methods_classes[$rate->get_method_id()] ?? null;
+           $methodclass = $methods_classes[$methodid] ?? null;
            $shipping_method = $methodclass ? new $methodclass($rate->get_instance_id()) : null;
 
            $tax  = $rate->get_shipping_tax() ?: 0;
            $cost = $rate->get_cost() ?: 0;
            $label = $rate->get_label();
+  
+           if ($cost == 0 && ($methodid != 'local_pickup' && $methodid != 'pickup_location')) {
+              $has_free_shipping = true;
+           }
 
            // We can't just use the method id, because the customer may have different addresses. Just to be sure, hash the entire method and use as a key.
            // Actually, we probably *can* use the method id, because other addresses are irellevant. But still, add a random factor 
-           $methodid = $rate->get_method_id();
            $rand = md5($methodid . bin2hex(random_bytes(32))); // Random enough, 32 chars
            // Ensure this never is over 100 chars. Use a dollar sign to indicate 'new method' IOK 2020-02-14
            // Reserve 8 chars to contain a : and an option index for Express Checkout IOK 2025-08-15
@@ -3079,6 +3107,9 @@ else:
             // Retrieve these precalculated rates on return from the store IOK 2020-02-14 
             $storedmethods[$key] = $serialized;
         }
+        // We'll also store whether or not this set of rates include free shipping in some way. IOK 2025-09-16
+        $storedmethods['_meta_has_free_shipping'] = $has_free_shipping;
+
         $order->update_meta_data('_vipps_express_checkout_shipping_method_table', $storedmethods);
         $order->save_meta_data();
         return $return;
