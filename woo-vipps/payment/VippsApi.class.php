@@ -511,6 +511,11 @@ class VippsApi {
 
         $express = $order->get_meta('_vipps_express_checkout');
 
+        // Make it easier to find express checkout orders in Vipps' backend IOK 2025-10-29
+        if ($express) {
+           $headers['Vipps-System-Plugin-Name'] = 'woo-vipps-express';
+        }
+
         // We will use this to retrieve the orders in the callback, since the prefix can change in the admin interface. IOK 2018-05-03
         // This is really for the new epayment api only, but we do this to ensure we use the same logic. For short prefixes and order numbers.
         // Pad orderid with 0 to the left so the entire vipps-orderid/reference is at least 8 chars long. IOK 2022-04-06
@@ -619,7 +624,7 @@ class VippsApi {
         // The limit for the transaction text is 100. Ensure we don't go over. Thanks to Marco1970 on wp.org for reporting this. IOK 2019-10-17
         $length = strlen($data['paymentDescription']);
         if ($length>99) {
-          $this->log('The transaction text is too long! We are using a shorter transaction text to allow the transaction text to go through, but please check the \'woo_vipps_transaction_text_shop_id\' filter so that you can use a shorter name for your store', 'woo-vipps');
+          $this->log(__('The transaction text is too long! We are using a shorter transaction text to allow the transaction text to go through, but please check the \'woo_vipps_transaction_text_shop_id\' filter so that you can use a shorter name for your store', 'woo-vipps'));
           $data['paymentDescription'] = substr($data['paymentDescription'],0,90); // Add some slack if this happens. IOK 2019-10-17
         }
 
@@ -762,7 +767,7 @@ class VippsApi {
         // The limit for the transaction text is 100. Ensure we don't go over. Thanks to Marco1970 on wp.org for reporting this. IOK 2019-10-17
         $length = strlen($transaction['paymentDescription']);
         if ($length>99) {
-          $this->log('The transaction text is too long! We are using a shorter transaction text to allow the transaction text to go through, but please check the \'woo_vipps_transaction_text_shop_id\' filter so that you can use a shorter name for your store', 'woo-vipps');
+          $this->log(__('The transaction text is too long! We are using a shorter transaction text to allow the transaction text to go through, but please check the \'woo_vipps_transaction_text_shop_id\' filter so that you can use a shorter name for your store', 'woo-vipps'));
           $transaction['paymentDescription'] = substr($transaction['paymentDescription'],0,90); // Add some slack if this happens. IOK 2019-10-17
         }
 
@@ -971,6 +976,22 @@ class VippsApi {
         $res = $this->http_call($msn,$command . "/" . urlencode($reference),$data,'PATCH',$headers,'json'); 
         return $res;
     }
+    public function checkout_expire_session($order) {
+        $msn = $this->get_merchant_serial();
+        $clientid = $this->get_clientid($msn);
+        $secret = $this->get_secret($msn);
+        $vippsorderid = $order->get_meta('_vipps_orderid');
+        $reference = $vippsorderid;
+        $command = "checkout/v3/session/$reference/expire";
+
+        $headers = $this->get_headers($msn);
+        // Required for Checkout
+        $headers['client_id'] = $clientid;
+        $headers['client_secret'] = $secret;
+
+        $res = $this->http_call($msn, $command, [], 'POST', $headers, 'json'); 
+        return $res;
+    }
 
     // Returns same data as session poll; we've changed it so 404s and so returns as words
     public function checkout_get_session_info($order) {
@@ -1040,7 +1061,7 @@ class VippsApi {
         // The limit for the transaction text is 100. Ensure we don't go over. Thanks to Marco1970 on wp.org for reporting this. IOK 2019-10-17
         $length = strlen($transaction['transactionText']);
         if ($length>99) {
-          $this->log('The transaction text is too long! We are using a shorter transaction text to allow the transaction text to go through, but please check the \'woo_vipps_transaction_text_shop_id\' filter so that you can use a shorter name for your store', 'woo-vipps');
+          $this->log(__('The transaction text is too long! We are using a shorter transaction text to allow the transaction text to go through, but please check the \'woo_vipps_transaction_text_shop_id\' filter so that you can use a shorter name for your store', 'woo-vipps'));
           $transaction['transactionText'] = __('Order capture for order','woo-vipps') . ' ' . $orderid;
           $transaction['transactionText'] = substr($transaction['transactionText'],0,90); // Add some slack if this happens. IOK 2019-10-17
         }

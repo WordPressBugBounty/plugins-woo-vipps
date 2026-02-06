@@ -33,8 +33,6 @@ SOFTWARE.
 }
 
 /* And this is for the products blocks IOK 2020-09-03 */
-.wc-block-grid__product .vippsbuynow {
-}
 .wc-block-grid__product .single-product.button.vipps-buy-now .inline.vipps-logo.negative {
     display: inline-block;
     margin: 0 .2em;
@@ -61,13 +59,13 @@ SOFTWARE.
 /* Gutenberg buy-now product block. LP 02.12.2024 */
 div.wp-block-button.wc-block-components-product-button.wc-block-button-vipps {
     text-align: center;
-    margin-bottom:0;
 }
 div.wp-block-button.wc-block-components-product-button.wc-block-button-vipps a.single-product.button.vipps-buy-now{
     margin-left: auto;
     margin-right: auto;
     display: inline-block;
     padding-top:0;
+    background-color: transparent;
 }
 div.wp-block-button.wc-block-components-product-button.wc-block-button-vipps a.single-product.button.vipps-buy-now img{
     max-width: 9rem;
@@ -229,8 +227,8 @@ a.button.vipps-express-checkout img {
     max-height: 100%;
     filter: drop-shadow( 0px 1px 2px #d7d7d7);
 }
-a.button.vipps-express-checkout.MobilePay.short img {
-    width: 9rem;
+a.button.vipps-express-checkout.short img {
+    width:initial;
 }
 a.button.vipps-express-checkout:hover img {
     opacity: 0.9;
@@ -280,9 +278,10 @@ a.single-product.button.vipps-buy-now  {
     padding-bottom:0;
 }
 
-.widget_shopping_cart a.button.vipps-express-checkout {
+body .widget_shopping_cart a.button.vipps-express-checkout, body .widget_shopping_cart a.button.vipps-express-checkout:hover {
  color:transparent;
- background-color: #fff;
+ border:0;
+ background-color: transparent;
  float: none;
  margin-top: .5em;
  margin-bottom: 0;

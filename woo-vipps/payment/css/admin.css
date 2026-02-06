@@ -61,13 +61,23 @@ table.webhook-table td.actions {
 }
 
 /* Gutenberg buy-now product block, copied from vipps.css LP 02.12.2024 */
+.vipps-buy-now-block-edit-header {
+    display: flex;
+    flex-direction: row;
+    gap: .8rem;
+    margin-bottom: .5rem;
+    justify-content: center;
+}
+.vipps-buy-now-button-product-search {
+    margin-bottom: .4rem;
+}
 div.wp-block-button.wc-block-components-product-button.wc-block-button-vipps {
     text-align: center;
 }
 div.wp-block-button.wc-block-components-product-button.wc-block-button-vipps a.single-product.button.vipps-buy-now{
-    /* margin-left: auto;
-    margin-right: auto; */
     display: inline-block;
+    background-color: transparent;
+    border: 0;
 }
 div.wp-block-button.wc-block-components-product-button.wc-block-button-vipps a.single-product.button.vipps-buy-now img{
     max-width: 10rem;
@@ -234,4 +244,29 @@ body.post-type-vipps_qr_code.wp-admin .url-section .url-options .url-option.acti
 .woo-vipps-warning {
     font-size:larger;
     font-weight:medium;
+}
+
+/* Button page stuff */
+.vipps-button-settings label {
+    width: 20%;
+    display: inline-block;
+    font-weight: 550;
+}
+
+.vipps-button-settings-img-container {
+    max-width: 768px;
+    display: flex;
+    justify-content: center;
+}
+
+.vipps-button-settings-img-container img {
+    margin-top: 0.5rem;
+}
+
+.vipps-button-settings-section {
+    margin-bottom: 2rem;
+}
+
+.vipps-button-settings-express-force-mini-container {
+    margin-bottom: .5rem;
 }

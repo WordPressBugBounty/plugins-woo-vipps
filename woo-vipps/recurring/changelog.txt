@@ -1,5 +1,22 @@
 == Changelog ==
 
+= 2.2.5 =
+* Fix: Set language correctly in Checkout.
+
+= 2.2.4 =
+* Fix: Paying for a failed order with Vipps/MobilePay now works as intended. Previously the order would not be automatically charged, and marked with the correct renewal status.
+
+= 2.2.3 =
+* Fix: Reduced the lead time for recurring charges to one day instead of two days, as per the latest changes to the API: https://developer.vippsmobilepay.com/docs/technical-updates/2025-11/#one-day-lead-time-for-recurring-charges
+* Fix: Sometimes `subscription_id` in our `maybe_delete_subscription` hook could sometimes be an actual `WC_Subscription` object instead of an ID.
+
+= 2.2.2 =
+* Fix: Improved compatibility with legacy WooCommerce order storage.
+* Fix: Stop checking orders where the charge was cancelled in cron.
+
+= 2.2.1 =
+* Fix: No longer cancel an agreement that has pending charges while the customer is swapping payment gateways.
+
 = 2.2.0 =
 * Fix: `get_latest_charge_for_agreement` was returning the first charge instead of the latest charge. The display order in this API endpoint seems to have changed with time.
 * Added: Renewal charges now use the order id prefix as well, as intended. No more unpredictable chr_ transaction ids.

@@ -65,6 +65,9 @@ class VippsCheckout {
         add_filter( 'woocommerce_order_email_verification_required', array($VippsCheckout, 'allow_other_payment_method_email'), 10, 3);
         add_action('wp_footer', array($VippsCheckout, 'maybe_proceed_to_payment'));
 
+        // Expire the Checkout session on order cancel. LP 2025-09-25
+        add_action('woocommerce_order_status_cancelled', array($VippsCheckout, 'woocommerce_order_status_cancelled'));
+
 
         add_filter('woo_vipps_shipping_method_pickup_points', function ($points, $rate, $shipping_method, $order) {
             if ($rate->method_id == 'pickup_location' && $order->get_meta('_vipps_checkout')) {
@@ -92,6 +95,22 @@ class VippsCheckout {
         }, 10, 4);
 
 
+    }
+
+    function woocommerce_order_status_cancelled ($orderid) {
+        $order = wc_get_order($orderid);
+        // Do this only if we have a checkout saved in the order
+        $is_checkout = $order->get_meta('_vipps_checkout_session');
+        if (!$is_checkout) return;
+        try {
+            // If the order isn't in the right state, this will do nothing. IOK 2025-10-08
+            $this->gateway()->api->checkout_expire_session($order);
+        } catch (Exception $e) {
+            $this->log(sprintf(__("Cannot expire checkout session for order %d: %s", 'woo-vipps'), $orderid, $e->getMessage()));
+        }
+        // Cleanup the order, and ensure that we don't do this twice by deleting the old session
+        $order->delete_meta_data('_vipps_checkout_session');
+        $order->save_meta_data();
     }
 
     public function allow_other_payment_method_email ($email_verification_required, $order, $context ) {
@@ -234,7 +253,6 @@ jQuery(document).ready(function () {
             }
             $order->set_status('cancelled', __("Session terminated with no payment", 'woo-vipps'), false);
             // Also mark for deletion and remove stored session
-            $order->delete_meta_data('_vipps_checkout_session');
             $order->update_meta_data('_vipps_delendum',1);
             $order->save();
             $url = $order->get_checkout_payment_url();
@@ -410,6 +428,8 @@ jQuery(document).ready(function () {
         $redir = "";
         $token = "";
 
+        Vipps::set_locale_if_in_header();
+
         // First, check that we haven't already done this like in another window or something:
         // IOK 2024-06-04 This also happens when using the back button! Sometimes!
         $sessioninfo = $this->vipps_checkout_current_pending_session();
@@ -422,6 +442,7 @@ jQuery(document).ready(function () {
             $src = $sessioninfo['session']['checkoutFrontendUrl'];
             $url = $src; 
         }
+
         // And if we do, just return what we have. NB: This *should not happen*.
         // IOK 2025-05-04 what are you talking about IOK, this absolutely happens e.g. when using the backbutton to a page starting the orders.
         if ($url || $redir) {
@@ -552,6 +573,8 @@ jQuery(document).ready(function () {
         $lock_held = intval($_REQUEST['lock_held'] ?? 0);
         $action = sanitize_title($_REQUEST['callback_action'] ?? 0);
 
+        Vipps::set_locale_if_in_header();
+
         add_filter('woo_vipps_is_checkout_callback', '__return_true'); // Signal that this is a special context.
 
         // add some default action handlers IOK  2025-05-13
@@ -636,6 +659,8 @@ jQuery(document).ready(function () {
         $orderid = intval($_REQUEST['orderid']??0); // Currently not used because we are using a single pending order in session
         $lock_held = intval($_REQUEST['lock_held'] ?? 0);
         $type = $_REQUEST['type'] ?? "unknown"; // Type of callback
+
+        Vipps::set_locale_if_in_header();
 
         // The single current pending order. IOK 2025-04-25
         $current_pending = is_a(WC()->session, 'WC_Session') ? WC()->session->get('vipps_checkout_current_pending') : false;
@@ -784,6 +809,7 @@ jQuery(document).ready(function () {
     // Also any other checks we might want to do in the future. This will validate the cart each time the
     //  checkout page loads, even if a session is already in progress.  IOK 2024-09-09
     public function ajax_vipps_checkout_validate_cart() {
+        Vipps::set_locale_if_in_header();
         $cart_total = WC()->cart->get_total('edit') ?: 0;
         $minimum_amount = 1; // 1 in the store currency
 
@@ -850,6 +876,9 @@ jQuery(document).ready(function () {
         $current_pending = is_a(WC()->session, 'WC_Session') ? WC()->session->get('vipps_checkout_current_pending') : false;
         $order = $current_pending ? wc_get_order($current_pending) : null;
         if (!$order) return "";
+
+        Vipps::set_locale_if_in_header();
+
         print $this->get_checkout_widgets($order);
         exit();
     }
@@ -934,6 +963,7 @@ jQuery(document).ready(function () {
                     add_filter('woocommerce_add_error', function ($message) { return ""; });
                     add_filter('woocommerce_add_notice', function ($message) { return ""; });
 
+		    do_action('woo_vipps_checkout_before_applying_coupon', $order, $code);
                     if (WC()->cart) {
 
 
@@ -957,6 +987,7 @@ jQuery(document).ready(function () {
 
                     $res = $order->apply_coupon($code);
                     if (is_wp_error($res)) throw (new Exception("Failed to apply coupon code $code"));
+		    do_action('woo_vipps_checkout_after_applying_coupon', $order, $code);
 
                     return 1;
                 }
@@ -966,12 +997,14 @@ jQuery(document).ready(function () {
             $filters['removecoupon'] = function ($action, $order) {
                 $code = isset($_REQUEST['callbackdata']['code']) ? trim($_REQUEST['callbackdata']['code']) : '';
                 if ($code) {
+		    do_action('woo_vipps_checkout_before_removing_coupon', $order, $code);
                     // Ensure the cart too loses the coupon
                     if (WC()->cart) {
                       $ok = WC()->cart->remove_coupon($code);
                       // can't do much if this fails so
                     }
                     $res = $order->remove_coupon($code);
+		    do_action('woo_vipps_checkout_after_removing_coupon', $order, $code);
 
                     $coupon = new WC_Coupon($code);
                     $has_free = $coupon->get_free_shipping();
@@ -1210,7 +1243,7 @@ jQuery(document).ready(function () {
         $this->abandonVippsCheckoutOrder($order);
     } 
     
-    public function abandonVippsCheckoutOrder($order) {
+     public function abandonVippsCheckoutOrder($order) {
 
         if (WC()->session) {
             WC()->session->set('vipps_checkout_current_pending',0);
@@ -1250,8 +1283,7 @@ jQuery(document).ready(function () {
             // NB: This can *potentially* be revived by a callback!
             $this->log(sprintf(__('Cancelling Checkout order because order changed: %1$s', 'woo-vipps'), $order->get_id()), 'debug');
             $order->set_status('cancelled', __("Order specification changed - this order abandoned by customer in Checkout  ", 'woo-vipps'), false);
-            // Also mark for deletion and remove stored session
-            $order->delete_meta_data('_vipps_checkout_session');
+            // Also mark for deletion.
             $order->update_meta_data('_vipps_delendum',1);
             $order->save();
         }
@@ -1520,6 +1552,9 @@ jQuery(document).ready(function () {
 
             if ($m2['brand'] != "OTHER" && isset($meta['type'])) {
                 $m2['type'] = $meta['type'];
+                if ($m2['brand'] === 'POSTI') {
+                    $m2['type'] = 'PICKUP_POINT'; // Temp fix. Posti only supports pickup point now. LP 2025-10-17
+                }
             }
 
             // Old filter kept for backwards compatibility

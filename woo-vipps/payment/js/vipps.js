@@ -28,6 +28,7 @@ SOFTWARE.
 */
 
 // Hook vippsInit to woocommerce/product-collection render event. LP 29.11.2024
+// IOK 2026-01-14 available from woo 9.4 - so the buy now block will not be available until that version
 document.body.addEventListener('wc-blocks_product_list_rendered',
   function (event) {
     document.body.dispatchEvent(new Event('vippsInit'));
@@ -56,26 +57,30 @@ jQuery( document ).ready( function() {
  
  // Hooks for the 'buy now with vipps' button on product pages etc
  jQuery('body').on('found_variation', function (e,variation) {
+   const form = jQuery(e.target);
+   const target = form.find(".button.single-product.vipps-buy-now.variable-product");
 
    var purchasable=true;
    if ( ! variation.is_purchasable || ! variation.is_in_stock || ! variation.variation_is_visible ) {
      purchasable = false;
    }
-   jQuery('form .button.single-product.vipps-buy-now').addClass('variation-found');
+   target.addClass('variation-found');
    if (purchasable) {
-    jQuery('form .button.single-product.vipps-buy-now').removeAttr('disabled');
-    jQuery('form .button.single-product.vipps-buy-now').removeClass('disabled');
+    target.removeAttr('disabled');
+    target.removeClass('disabled');
     removeErrorMessages();
    } else {
-    jQuery('form .button.single-product.vipps-buy-now').attr('disabled','disabled');
-    jQuery('form .button.single-product.vipps-buy-now').addClass('disabled');
+    target.attr('disabled','disabled');
+    target.addClass('disabled');
     removeErrorMessages();
    }
  });
- jQuery('body').on('reset_data', function () {
-    jQuery('form .button.single-product.vipps-buy-now').removeClass('variation-found');
-    jQuery('form .button.single-product.vipps-buy-now').attr('disabled','disabled');
-    jQuery('form .button.single-product.vipps-buy-now').addClass('disabled');
+ jQuery('body').on('reset_data', function (e) {
+    const form = jQuery(e.target)
+    const target = form.find(".button.single-product.vipps-buy-now.variable-product");
+    target.removeClass('variation-found');
+    target.attr('disabled','disabled');
+    target.addClass('disabled');
     removeErrorMessages();
  });
  // If this is triggered, somebody just loaded a variation form, so we need to redo the button init scripts
@@ -188,6 +193,7 @@ jQuery( document ).ready( function() {
     "method": "POST",
     "data":data,
     "cache":false,
+    "headers": {"Accept-Language": `${VippsConfig['vippslocale']}, *`},
     "dataType": "json",
     "error": function (xhr, statustext, error) {
       console.log("Error creating express checkout:" + statustext + " " + error);
