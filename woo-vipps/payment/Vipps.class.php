@@ -1553,10 +1553,21 @@ jQuery('a.webhook-adder').click(function (e) {
         do_action('vipps_admin_notices');
     }
 
-    // Show express option on checkout form too
-    public function before_checkout_form_express () {
-        if (is_user_logged_in()) return;
-        $this->express_checkout_banner();
+    // Show express button option on checkout form. LP 2026-03-23
+    public function checkout_before_customer_details_express () {
+        $gw = $this->gateway();
+        if (!$gw->show_express_checkout()) return;
+        $this->express_checkout_section_html();
+    }
+
+    public function express_checkout_section_html() {
+        $payment_method = $this->get_payment_method_name();
+        $header_text = __('Express Checkout', 'woo-vipps');
+        $header = "<div class='express-header'>$header_text</div>";
+        $div_classes = "legacy-checkout vipps-express-checkout $payment_method";
+        echo "<div class='$div_classes'>$header";
+        $this->cart_express_checkout_button_html();
+        echo '</div>';
     }
 
     public function express_checkout_banner() {
@@ -1625,7 +1636,7 @@ jQuery('a.webhook-adder').click(function (e) {
         $gw = $this->gateway();
         if (!$gw->cart_supports_express_checkout()) return;
         ob_start();
-        $this->cart_express_checkout_button_html();
+        $this->cart_express_checkout_button_html('shortcode');
         return ob_get_clean();
     }
     // Show a banner normally shown for non-logged-in-users at the checkout page.  It does not need to check if we are to show the button, obviously, but needs to see if the cart works
@@ -2461,7 +2472,10 @@ else:
         // Template integrations
         add_action( 'woocommerce_cart_actions', array($this, 'cart_express_checkout_button'));
         add_action( 'woocommerce_widget_shopping_cart_buttons', array($this, 'minicart_express_checkout_button'), 30);
-        add_action('woocommerce_before_checkout_form', array($this, 'before_checkout_form_express'), 5);
+
+        // Previously we added an express html banner to the action 'woocommerce_before_checkout_form.',
+        // replaced by the new express buttons in manner more like Gutenberg. LP 2026-03-23
+        add_action('woocommerce_checkout_before_customer_details', array($this, 'checkout_before_customer_details_express'), 5);
 
         add_action('woocommerce_after_add_to_cart_button', array($this, 'single_product_buy_now_button'));
         add_action('woocommerce_after_shop_loop_item', array($this, 'loop_single_product_buy_now_button'), 20);
@@ -5433,7 +5447,8 @@ else:
         // Status is failed; still send to return url (as of now /order-recieved), the text there will depend on the status.
         // For failed it shows a "Retry payment" button that takes the customer to /pay-for-order where it will be retried. LP 2026-03-17
         if ('failed' == $status) {
-            wp_redirect($failure_redirect ?: $gw->get_return_url($order));
+            $failure_redirect = $failure_redirect ?: $gw->get_return_url($order);
+            wp_redirect($failure_redirect);
             exit();
         }
         if ($status == 'cancelled' || $payment == 'cancelled') {
@@ -5491,7 +5506,7 @@ else:
 
         $content .= "<div id=failure style='display:none'><p>". __('Order cancelled', 'woo-vipps') . '</p>';
         $content .= "<p><a href='" . home_url() . "' class='btn button'>" . __('Continue shopping','woo-vipps') . '</a></p>';
-        $content .= "<a id='continueToOrderFailed' style='display:none' href='" . ($failure_redirect ?: $gw->get_return_url($order)) . "'></a>";
+        $content .= "<a id='continueToOrderFailed' style='display:none' href='" . ($failure_redirect) . "'></a>";
         $content .= "</div>";
 
 
