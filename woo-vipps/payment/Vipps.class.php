@@ -2651,10 +2651,6 @@ else:
                $gw = $this->gateway();
                $ok = $gw->maybe_capture_payment($order->get_id());
            }
-           if ($action == 'refund_superfluous') {
-               $gw = $this->gateway();
-               $ok = $gw->refund_superfluous_capture($order);
-           }
            print "1";
     }
 
@@ -2714,7 +2710,6 @@ else:
 
     public function order_item_add_action_buttons ($order) {
         $this->order_item_add_capture_button($order);
-        $this->order_item_refund_superfluous_captured_amount($order);
     }
 
     public function order_item_add_capture_button ($order) {
@@ -2729,7 +2724,7 @@ else:
 
         $captured = intval($order->get_meta('_vipps_captured'));
         $capremain = intval($order->get_meta('_vipps_capture_remaining'));
-        if ($captured && !$capremain) { 
+        if ($captured && !$capremain || $capremain < 2) { 
             print "<div><strong>" . sprintf(__("The entire amount has been captured at %1\$s", 'woo-vipps'), $this->get_payment_method_name()) . "</strong></div>";
             return;
         }
@@ -2740,31 +2735,6 @@ else:
                  data-orderid="' . $order->get_id() . '" data-action="do_capture"
                  style="background-color:#ff5b24;border-color:#ff5b24;color:#ffffff" >
                 <img border=0 style="display:inline;height:2ex;vertical-align:text-bottom" class="inline" alt=0 src="'.$logo.'"/> ' . __('Capture payment','woo-vipps') . '</button>';
-
-    } 
-
-    public function order_item_refund_superfluous_captured_amount ($order) {
-        $pm = $order->get_payment_method();
-        if ($pm != 'vipps') return;
-        $status = $order->get_status();
-
-        if ($status != 'completed') return;
-
-        $captured = intval($order->get_meta('_vipps_captured'));
-        $total = intval(100*wc_format_decimal($order->get_total(),''));
-        $refunded = intval($order->get_meta('_vipps_refunded'));
-
-        $superfluous = $captured-$total-$refunded;
-
-        if ($superfluous<=0) {
-            return;
-        }
-        $logo = plugins_url('img/vipps_logo_negativ_rgb_transparent.png',__FILE__);
-        print "<div><strong>" . sprintf(__('More funds than the order total has been captured at %1$s. Press this button to refund this amount at %1$s without editing this order', 'woo_vipps'), $this->get_payment_method_name()) . "</strong></div>";
-        print '<button type="button" class="button vippsbutton generate-items vipps-action" 
-                 data-orderid="' . $order->get_id() . '" data-action="refund_superfluous"
-                 style="background-color:#ff5b24;border-color:#ff5b24;color:#ffffff" >
-                <img border=0 style="display:inline;height:2ex;vertical-align:text-bottom" class="inline" alt=0 src="'.$logo.'"/> ' . __('Refund superfluous payment','woo-vipps')  . '</button>';
 
     } 
 
@@ -3462,6 +3432,10 @@ else:
         $methods_classes = WC()->shipping->get_shipping_method_class_names();
         $methods_classes['pickup_location'] = 'Automattic\WooCommerce\Blocks\Shipping\PickupLocation'; // Loaded using the "load" hook, after the registered methods, so we need to add it specially.
 
+        // Store a table of ratemap key => WC_Shipping_Rate id in the session, so we don't have to load and deserialize the rates from the ratemap,
+        // e.g used in the Checkout ajax poll shipping-change event. LP 2026-03-20
+        $rate_id_map = [];
+
         $has_free_shipping = false;
         foreach($methods as $method) {
            $rate = $method['rate'];
@@ -3490,6 +3464,8 @@ else:
            $vippsmethod['isDefault'] = @$method['default'] ? 'Y' :'N';
            $vippsmethod['priority'] = $method['priority'];
 
+           $rate_id_map[$key] = $rate->get_id();
+
            // It seems woo actually computes rounding of prices and taxes *separately* when computing
            // shipping costs, but we can't really assume this (or that all plugins do this, and so on.)
            // Therefore we compute shipping cost with rounding *both ways* and choose the more expensive one -
@@ -3510,6 +3486,14 @@ else:
            $ratemap[$key]=$rate;
            $methodmap[$key]=$shipping_method;
         }
+
+        if (is_a(WC()->session, 'WC_Session')) {
+            WC()->session->set('vipps_shipping_rate_id_map', $rate_id_map);
+        } else {
+            /* translators: order id */
+            $this->log(sprintf(__('Could not store shipping rate id map in session for order %1$s, session was not ok', 'woo_vipps'), $order->get_id()), 'error');
+        }
+
 
         // This then is the old Express Checkout format, which we have exposed in filters. IOK 2025-08-14 
         $return = array('addressId'=>intval($addressid), 'orderId'=>$vippsorderid, 'shippingDetails'=>$vippsmethods);
@@ -4651,9 +4635,9 @@ else:
             wp_send_json(array('status'=>'waiting', 'msg'=>__('Waiting on order', 'woo-vipps')));
             return false;
         }
-        if ($order_status == 'cancelled') {
+        if ($order_status == 'cancelled' || $order_status == 'failed') {
             $this->maybe_restore_cart($orderid,'failed');
-            wp_send_json(array('status'=>'failed', 'msg'=>__('Order failed', 'woo-vipps')));
+            wp_send_json(array('status'=>'failed', 'msg'=>__('Order failed', 'woo-vipps'), 'order_status' => $order_status));
             return false;
         }
 
@@ -5524,7 +5508,8 @@ else:
 
         $content .= "<div id=failure style='display:none'><p>". __('Order cancelled', 'woo-vipps') . '</p>';
         $content .= "<p><a href='" . home_url() . "' class='btn button'>" . __('Continue shopping','woo-vipps') . '</a></p>';
-        $content .= "<a id='continueToOrderFailed' style='display:none' href='" . ($failure_redirect) . "'></a>";
+        $content .= "<a id='continueToOrderFailed' style='display:none' href='" . $failure_redirect . "'></a>";
+        $content .= "<a id='continueToOrderFailedFallback' style='display:none' href='" . $gw->get_return_url($order) . "'></a>";
         $content .= "</div>";
 
 
