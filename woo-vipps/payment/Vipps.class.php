@@ -136,7 +136,9 @@ class Vipps {
         if (is_checkout_pay_page()) {
             $orderid = absint(get_query_var( 'order-pay')); 
             $order = $orderid ? wc_get_order($orderid) : null;
-            if (is_a($order, 'WC_Order')) {
+            if (is_a($order, 'WC_Order') 
+                && $order->get_meta('_vipps_init_timestamp') // allow vipps payment for new orders, like when creating an order from backend. LP 2026-05-28
+            ) {
                 // Existing override that allows repayment. IOK 2024-06-04
                 // i.e a third party plugin that implemented payment retrying for our plugin, we used to enable repayment only if this plugin was found.
                 // $allow_repayment = class_exists('\Site\Plugins\WooVipps\WooVippsPayForOrder');
@@ -328,7 +330,7 @@ class Vipps {
         // IOK 2026-05-26 redirect the old Woo-generated settings-screen to our own settings page.
         add_action('current_screen', function ($screen) {
             if (!is_admin() || !$screen || $screen->id !== 'woocommerce_page_wc-settings')  return;
-            if ($_GET['tab'] != 'checkout' || $_GET['section'] != 'vipps') return;
+            if (($_GET['tab']  ?? "")!= 'checkout' || ($_GET['section'] ?? "") != 'vipps') return;
             wp_safe_redirect(admin_url('admin.php?page=vipps_settings_menu'));
             exit();
         });
