@@ -3,14 +3,14 @@ Contributors: wphostingdev, everydayas, iverok, perwilhelmsen, nikolaidev, lasse
 Author: WP Hosting, Everyday AS
 Author URI: https://www.wp-hosting.no/
 Tags: woocommerce, vipps, mobilepay, recurring payments, subscriptions
-Version: 6.0.5
-Stable tag: 6.0.5
+Version: 6.1.0
+Stable tag: 6.1.0
 Requires at least: 6.3
-Tested up to: 7.0.0
+Tested up to: 7.0.2
 Requires PHP: 8.0
 Requires Plugins: woocommerce
 WC requires at least: 8.0.0
-WC tested up to: 10.8.1
+WC tested up to: 10.9.4
 License: MIT
 License URI: https://choosealicense.com/licenses/mit/
 Official Vipps MobilePay payment plugin for WooCommerce.
@@ -117,18 +117,10 @@ If you have questions, you can check our [FAQ](https://vippsmobilepay.com/vippsm
 This project is hosted on Github at: https://github.com/vippsas/vipps-woocommerce
 
 == Upgrade Notice ==
-Version 6.0.5
-Fix compatibility when inheriting PayPal gateway order
-Version 6.0.4
-Web component are now hosted locally
-Version 6.0.3
-Minor fixes in handling refunds
-Version 6.0.2
-Minor CSS fixes
-Version 6.0.1
-Fix small problems with tabs in the settings
-Version 6.0.0
-Support payment with credit or debit card as a separate payment method
+Version 6.1.0
+Removed support for beta block-based product editor
+Changed express checkout buttons to use web components
+Changed callback/webhook handler to use Async Queue to avoid race conditions
 
 == Frequently Asked Questions ==
 
@@ -301,6 +293,12 @@ From version 1.1.13 you can also modify the javascript using the new WP hooks li
  * 'vippsStatusCheckErrorHandler' - A filter that should return function taking a statustext and an error object. It receives the default error handler, and is called when checking the order status with ajax for some reason ends up in an error.
 
 == Changelog ==
+
+= 2027-08-04 version 6.1.0
+Removed experimental support for beta product editor 
+Changed express checkout buttons to use web components
+Changed callback/webhook handler to use Async Queue to avoid race conditions
+
 = 2026-06-24 version 6.0.5 =
 Fix compatibility when inheriting PayPal gateway order
 
@@ -340,7 +338,7 @@ Fix express heckout for woo versions less than 9.2.0
 Vipps Checkout now in legacy mode and available only for existing installs
 
 = 2026-03-26 Version 5.3.2 =
-Improve express checkout banner on legacy checkokut screens
+Improve express checkout banner on legacy checkout screens
 Add new setting for retryable orders
 
 = 2026-03-23 Version 5.3.1 =
