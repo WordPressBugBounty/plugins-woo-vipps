@@ -1841,6 +1841,8 @@ EOF;
 
     // Show express button option on checkout form. LP 2026-03-23
     public function checkout_before_customer_details_express () {
+        if (did_action('woo_vipps_checkout_before_customer_details_express')) return;
+        do_action('woo_vipps_checkout_before_customer_details_express');
         $gw = $this->gateway();
         if (!$gw->show_express_checkout()) return;
         $this->express_checkout_section_html();
@@ -2796,7 +2798,7 @@ else:
         add_action( 'woocommerce_widget_shopping_cart_buttons', array($this, 'minicart_express_checkout_button'), 30);
 
         // Previously we added an express html banner to the action 'woocommerce_before_checkout_form.',
-        // replaced by the new express buttons in manner more like Gutenberg. LP 2026-03-23
+        // replaced by the new express buttons in manner more like Gutenberg. for grepping: "express legacy checkout". LP 2026-03-23
         add_action('woocommerce_checkout_before_customer_details', array($this, 'checkout_before_customer_details_express'), 5);
 
         add_action('woocommerce_after_add_to_cart_button', array($this, 'single_product_buy_now_button'));
@@ -5300,8 +5302,10 @@ else:
         if (is_admin()) return;
         if (wp_doing_ajax()) return;
         if (defined('REST_REQUEST') && REST_REQUEST) return;
+        if (did_filter('woo_vipps_special_page_html')) return; // User has somehow added two shortcodes. IOK 2026-09-18
 
         $action = $_GET['action'] ?? '';
+        $html = "";
         switch ($action) {
             case 'wait_for_payment':
                 $html = $this->vipps_wait_for_payment();
@@ -5315,6 +5319,8 @@ else:
             default:
                 $html = '';
         }
+        // This is mostly to avoid this shortcode evaluating twice IOK 2026-09-18
+        $html = apply_filters('woo_vipps_special_page_html', $html, $action);
 
         // Remember, this is a shortcode, so the html must be returned, not echoed IOK 2026-09-11
         return $html;
@@ -5325,6 +5331,7 @@ else:
     // The argument passed must be a shareable link created for a given product - so this in effect acts as a landing page for 
     // the buying thru Vipps Express Checkout of a single product linked to in for instance banners. IOK 2018-09-24
     public function vipps_buy_product() {
+
         add_filter('body_class', function ($classes) {
             $classes[] = 'vipps-express-checkout';
             $classes[] = 'woocommerce-checkout'; // Required by Pixel Your Site IOK 2022-11-24
