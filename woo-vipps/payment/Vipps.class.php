@@ -1044,9 +1044,27 @@ jQuery('a.webhook-adder').click(function (e) {
     public function get_html_button_attrs_for_context($context = 'global') {
         $options = get_option('vipps_button_options2', []);
         if (!is_string($context)) $context = 'global';
+  
+        // Gutenberg express checkout buttons really want to be stretched, so we'll treat them somewhat differently.
+        $gutenberg = false;
+        if ($context == 'checkout_gutenberg') {
+            $context = 'checkout';
+            $gutenberg = true;
+        }
+        if ($context == 'cart_gutenberg') {
+            $context = 'cart';
+            $gutenberg = true;
+        }
+
         $config = $options['express']['configs'][$context] ?? [];
-        if (!$config || ($config['use-global-config'] ?? false)) {
+        $use_global = !$config || ($config['use-global-config'] ?? false);
+        if ($use_global) {
             $config = $options['express']['configs']['global'] ?? $this->get_html_button_default_attrs();
+        }
+
+        // see above.
+        if ($gutenberg) {
+            $config['stretched']='true';
         }
         return $config;
     }
@@ -1136,6 +1154,8 @@ EOF;
         $options = get_option('vipps_button_options2', []);
         $express = $options['express'] ?? [];
         $configs = $express['configs'] ?? [];
+
+
         $contexts = [
             'global' => __('Global', 'woo-vipps'),
             'product' => __('Product', 'woo-vipps'),
@@ -1310,6 +1330,7 @@ EOF;
                 // Swap to new context: set all input fields to the stored values if exists. LP 2026-06-25
                 const newContext = jQuery("#context").val();
                 const newConfig = contextConfigs[newContext];
+
                 setInputsFromConfig(newContext, newConfig);
                 currentContext = newContext;
             }
@@ -1912,14 +1933,13 @@ EOF;
         $gw = $this->gateway();
 
         if ($gw->show_express_checkout()){
-            return $this->cart_express_checkout_button_html(true);
+            return $this->cart_express_checkout_button_html('minicart');
         }
     }
 
-    public function cart_express_checkout_button_html($minicart = false) {
+    public function cart_express_checkout_button_html($context= 'cart') {
         $url = $this->express_checkout_url();
         $url = wp_nonce_url($url,'express','sec');
-        $context = $minicart ? 'minicart' : 'cart';
         $button= apply_filters('woo_vipps_express_checkout_button', $this->get_html_button_for_context($context));
         $method = $this->get_payment_method_name();
         $title = sprintf(__('Buy now with %1$s!', 'woo-vipps'), $method);
@@ -1964,7 +1984,7 @@ EOF;
         $gw = $this->gateway();
         if (!$gw->cart_supports_express_checkout()) return;
         ob_start();
-        $this->cart_express_checkout_button_html('shortcode');
+        $this->cart_express_checkout_button_html('cart');
         return ob_get_clean();
     }
     // Show a banner normally shown for non-logged-in-users at the checkout page.  It does not need to check if we are to show the button, obviously, but needs to see if the cart works
@@ -4149,7 +4169,7 @@ else:
             WC()->cart->set_session();
             return true;
         } catch (Exception $e) {
-            $this->log(sprintf(__("Error regenerating cart from order %1\$d:  %2\$s", 'woo-vipps'), $order_id,   $e->get_message()), 'error');
+            $this->log(sprintf(__("Error regenerating cart from order %1\$d:  %2\$s", 'woo-vipps'), $order_id,   $e->getMessage()), 'error');
             return false;
         }
     }
