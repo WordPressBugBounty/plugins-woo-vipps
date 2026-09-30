@@ -3,8 +3,8 @@ Contributors: wphostingdev, everydayas, iverok, perwilhelmsen, nikolaidev, lasse
 Author: WP Hosting, Everyday AS
 Author URI: https://www.wp-hosting.no/
 Tags: woocommerce, vipps, mobilepay, recurring payments, subscriptions
-Version: 6.2.5
-Stable tag: 6.2.5
+Version: 6.2.6
+Stable tag: 6.2.6
 Requires at least: 6.3
 Tested up to: 7.1.1
 Requires PHP: 8.0
@@ -117,20 +117,11 @@ If you have questions, you can check our [FAQ](https://vippsmobilepay.com/vippsm
 This project is hosted on Github at: https://github.com/vippsas/vipps-woocommerce
 
 == Upgrade Notice ==
-Version 6.2.5
-Fix style of express checkout buttons in Gutenberg Checkout and cart
-Security fix for info leakage in "choose other payment method" in Vipps Checkout
-Version 6.2.4
-Fix cart clearance for Woo 11.1
-Version 6.2.3
-Fix for compatibility mode
-Version 6.2.2
-Fix for the wait-for-payment page for certain themes
-Version 6.2.1
-Security fix for possible shop-manager level exploit
-Ensure certain events only happens once
-Version 6.2.0
-Replaced the fake-page mechanism with a modern WooCommerce-managed page for these actions
+Version 6.3.0
+Implements the new Vipps MobilePay Widget SDK, improving the Express Checkout experience
+Version 6.2.6
+* Fix: Add a class existence check for Checkout's classes during recurring payments
+Fix crashes with some Express Checkout shipping methods
 
 == Frequently Asked Questions ==
 
@@ -303,6 +294,15 @@ From version 1.1.13 you can also modify the javascript using the new WP hooks li
  * 'vippsStatusCheckErrorHandler' - A filter that should return function taking a statustext and an error object. It receives the default error handler, and is called when checking the order status with ajax for some reason ends up in an error.
 
 == Changelog ==
+= 2026-09-30 version 6.3.0 =
+Implements the new Vipps MobilePay Widget SDK, improving the Express Checkout experience
+Fix crashes with some Express Checkout shipping methods
+
+= 2026-09-30 version 6.2.6 =
+Fix crashes with some Express Checkout shipping methods
+Improve express checkout buttons
+Last version not using the Vipps MobilePay Widget SDK
+
 = 2026-09-24 version 6.2.5 =
 Fix style of express checkout buttons in Gutenberg Checkout and cart
 Security fix for info leakage in "choose other payment method" in Vipps Checkout
