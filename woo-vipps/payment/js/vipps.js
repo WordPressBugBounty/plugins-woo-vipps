@@ -143,7 +143,7 @@
 
         actionConfirm.id = "action-required-confirm";
         actionConfirm.setAttribute("brand", "vipps");
-        actionConfirm.setAttribute("language", "no");
+        actionConfirm.setAttribute("language", window.VippsConfig?.webcomponentLanguage);
         actionConfirm.setAttribute("verb", "continue");
         actionConfirm.setAttribute("variant", "primary");
         actionConfirm.setAttribute("type", "button");
@@ -901,7 +901,7 @@
             ".vipps-express-checkout:not(body)"
         );
 
-        if (!wrapper || !wrapper.querySelector("vipps-mobilepay-button")) {
+        if (!wrapper) {
             return;
         }
 

@@ -55,9 +55,6 @@ class Vipps {
     // True if HPOS is being used
     public $HPOSActive = null;
 
-    // used in the fake locking mechanism using transients
-    private $lockKey = null; 
-
     public $vippsJSConfig = array();
 
     public $button_options_version = '2.0';
@@ -270,13 +267,6 @@ class Vipps {
         // because it is self-updating or because it has been deactivated just now or something, we won't have access to it.
         // Therefore test it first. IOK 2022-12-08
         $gw = $this->gateway();
-
-        // This is a developer-mode level feature because flock() is not portable. This ensures callbacks and shopreturns do not
-        // simultaneously update the orders, in particular not the express checkout order lines wrt shipping. IOK 2020-05-19
-        if ($gw && $gw->get_option('use_flock') == 'yes') {
-            add_filter('woo_vipps_lock_order', array($this,'flock_lock_order'));
-            add_action('woo_vipps_unlock_order', array($this, 'flock_unlock_order'));
-        }
 
         // Set default button options, migrating any older setup IOK 2026-07-15
         $this->init_button_options();
@@ -1102,6 +1092,8 @@ jQuery('a.webhook-adder').click(function (e) {
         if (in_array($attrs['verb'], ['login', 'register'])) $attrs['verb'] = 'buy';
         // Looks like button and badge web components now use 'da' instead of 'dk' for danish. LP 2026-08-11
         if ('dk' === $attrs['language']) $attrs['language'] = 'da';
+        // Fix swedish too. LP 2026-10-06
+        if ('se' === $attrs['language']) $attrs['language'] = 'sv';
 
         $escaped_attrs = [];
         foreach($attrs as $k => $v) {
@@ -1958,7 +1950,7 @@ EOF;
         $payment_method = $this->get_payment_method_name();
         $header_text = __('Express Checkout', 'woo-vipps');
         $header = "<legend class='express-header'>$header_text</legend>";
-        $div_classes = "legacy-checkout vipps-express-checkout $payment_method";
+        $div_classes = "legacy-checkout express $payment_method";
         echo "<fieldset class='$div_classes'>$header";
         $this->checkout_express_checkout_button_html();
         echo '</fieldset>';
@@ -2577,79 +2569,6 @@ else:
         return null;
     }
 
-    // Unfortunately, we cannot do any form of portable locking, and we may get callbacks from Vipps arriving at the same moment as we check the status at Vipps,
-    // which in the very worst case, for Express Checkout orders, may lead to a double shipping line. Changing this to a queue system is non-trivial, because some of
-    // the operations done when modifying the order actually requires the customers session to be active. This operation will make conflicts a litte less probable
-    // by implementing something that isn't quite a lock, and the filter may be used to implement proper locking, using e.g. flock, where this can be used 
-    // (non-distributed environments using unix on standard filesystems. IOK 2020-05-15
-    // Returns true if lock succeeds, or false.
-    public function lockOrder($order) {
-        $orderid = $order->get_id();
-        if (has_filter('woo_vipps_lock_order')) {
-            $ok = apply_filters('woo_vipps_lock_order', $order);
-            if (!$ok) return false;
-        } else {
-            if(get_transient('order_lock_'.$orderid)) return false;
-            $this->lockKey = uniqid();
-            set_transient('order_lock_' . $orderid, $this->lockKey, 30);
-        }
-        add_action('shutdown', function () use ($order) { global $Vipps; $Vipps->unlockOrder($order); });
-        return true;
-    }
-    // If the order is locked, it means it is in the process of being finalized, so for instance, we do *not* want to abandon it
-    // in checkout.
-    public function isLocked ($order) {
-        $orderid = $order->get_id();
-        $locked = get_transient('order_lock_'.$orderid);
-        return apply_filters('woo_vipps_order_locked', $locked, $order);
-    }
-    public function unlockOrder($order) {
-        $orderid = $order->get_id();
-        if (has_action('woo_vipps_unlock_order')) {
-            do_action('woo_vipps_unlock_order', $order); 
-        } else {
-            if(get_transient('order_lock_'.$orderid) == $this->lockKey) {
-                delete_transient('order_lock_'.$orderid);
-            }
-        }
-    }
-
-    // Functions using flock() and files to lock orders. This is only guaranteed to work on certain setups, ie, non-distributed setups
-    // using Unix with normal filesystems (not NFS).
-    public function flock_lock_order($order) {
-       global $_orderlocks;
-       if (!$_orderlocks) $_orderlocks = array();
-       $dir = $this->callbackDir();
-       if (!$dir) { 
-         $this->log(__("Cannot use flock() to lock orders: cannot create or write to directory", "woo-vipps"), 'error');
-         return true;
-       }
-       $fname = '.ht-vipps-lock-'.md5($order->get_order_key() . $order->get_meta('_vipps_transaction'));
-       $path = $dir .  DIRECTORY_SEPARATOR . $fname;
-       touch($path);
-       if (!is_writable($path)) {
-         $this->log(__("Cannot use flock() to lock orders: cannot create lockfiles ", "woo-vipps"), 'error');
-         return true;
-       }
-       $handle = fopen($path, 'w+');
-       if (flock($handle, LOCK_EX | LOCK_NB)) {
-          $_orderlocks[$order->get_id()] = array($handle,$path);
-          return true;
-       }
-       return false;
-    }
-    public function flock_unlock_order($order) {
-       $orderid=$order->get_id();
-       global $_orderlocks;
-       if (!$_orderlocks) return;
-       if (!isset($_orderlocks[$orderid])) return;
-       list($handle, $path) = $_orderlocks[$orderid];
-       unset($_orderlocks[$orderid]);
-       flock($handle, LOCK_UN);
-       fclose($handle);
-       @unlink($path);
-    }
-   
 
     // Because the prefix used to create the Vipps order id is editable
     // by the user, we will store that as a meta and use this for callbacks etc.
@@ -3003,7 +2922,12 @@ else:
         $this->vippsJSConfig['vippsexpressbuttonurl'] = $this->get_payment_method_name();
         $this->vippsJSConfig['paymentMethodSlug'] = sanitize_title($this->get_payment_method_name());
         $this->vippsJSConfig['paymentMethodName'] = $this->get_payment_method_name();
-       
+        $wc_lang = $this->get_html_button_attrs_for_context()['language'];
+        if ('store' === $wc_lang) $wc_lang = $this->get_customer_language();
+        // Looks like button and badge web components now use 'da' instead of 'dk' for danish. LP 2026-08-11
+        if ('dk' === $wc_lang) $wc_lang = 'da';
+        $this->vippsJSConfig['webcomponentLanguage'] = $wc_lang;
+
 
         // If the site supports Gutenberg Blocks, support the Checkout block IOK 2020-08-10
         if (class_exists('Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType')) {
@@ -3878,7 +3802,7 @@ else:
 
            $tax  = $rate->get_shipping_tax() ?: 0;
            $cost = $rate->get_cost() ?: 0;
-           $label = $rate->get_label();
+           $label = html_entity_decode($rate->get_label());
   
            if ($cost == 0 && ($methodid != 'local_pickup' && $methodid != 'pickup_location')) {
               $has_free_shipping = true;
@@ -3906,7 +3830,7 @@ else:
            $shippingcost = max($shippingcostA, $shippingcostB);
 
            $vippsmethod['shippingCost'] = $shippingcost;
-           $vippsmethod['shippingMethod'] = $rate->get_label();
+           $vippsmethod['shippingMethod'] = html_entity_decode($rate->get_label());
            $vippsmethod['shippingMethodId'] = $key;
            $vippsmethods[]=$vippsmethod;
 
@@ -4253,7 +4177,7 @@ else:
             $cost = $rate->get_cost() ?: 0;
 
             $method['shippingCost'] = sprintf("%.2F",wc_format_decimal($cost+$tax,''));
-            $method['shippingMethod'] = $rate->get_label();
+            $method['shippingMethod'] = html_entity_decode($rate->get_label());
             // We may not really need the tax stashed here, but just to be sure.
             $method['shippingMethodId'] = $rate->get_id() . ";" . $tax; 
             $methods[]= $method;
