@@ -1086,15 +1086,10 @@ jQuery('a.webhook-adder').click(function (e) {
         $attrs['brand'] = strtolower($payment_method);
         $attrs['type'] = 'button'; // static
 
-        // Support using store language
-        if ('store' === $attrs['language']) $attrs['language'] = $this->get_customer_language();
         // Don't support these login verbs. LP 2026-06-04
         if (in_array($attrs['verb'], ['login', 'register'])) $attrs['verb'] = 'buy';
-        // Looks like button and badge web components now use 'da' instead of 'dk' for danish. LP 2026-08-11
-        if ('dk' === $attrs['language']) $attrs['language'] = 'da';
-        // Fix swedish too. LP 2026-10-06
-        if ('se' === $attrs['language']) $attrs['language'] = 'sv';
 
+        $attrs['language'] = $this->resolve_html_button_language($attrs['language']);
         $escaped_attrs = [];
         foreach($attrs as $k => $v) {
            $escaped_attrs[$k] = esc_attr($v);
@@ -1130,6 +1125,16 @@ jQuery('a.webhook-adder').click(function (e) {
 ></vipps-mobilepay-button>
 EOF;
         return apply_filters('woo_vipps_html_button', $html, $attrs);
+    }
+
+    // Resolve language for web component library. LP 2026-10-07
+    public function resolve_html_button_language($language) {
+        if ('store' === $language) $language = $this->get_customer_language(); // currently store is the default language. LP 2026-10-07
+
+        // Looks like button and badge web components now use 'da' instead of 'dk' for danish. LP 2026-08-11
+        if ('dk' === $language) $language = 'da';
+        if ('se' === $language) $language = 'sv';
+        return $language;
     }
 
     public function button_menu_page() {
@@ -2922,12 +2927,8 @@ else:
         $this->vippsJSConfig['vippsexpressbuttonurl'] = $this->get_payment_method_name();
         $this->vippsJSConfig['paymentMethodSlug'] = sanitize_title($this->get_payment_method_name());
         $this->vippsJSConfig['paymentMethodName'] = $this->get_payment_method_name();
-        $wc_lang = $this->get_html_button_attrs_for_context()['language'];
-        if ('store' === $wc_lang) $wc_lang = $this->get_customer_language();
-        // Looks like button and badge web components now use 'da' instead of 'dk' for danish. LP 2026-08-11
-        if ('dk' === $wc_lang) $wc_lang = 'da';
+        $wc_lang = $this->resolve_html_button_language($this->get_html_button_attrs_for_context()['language']);
         $this->vippsJSConfig['webcomponentLanguage'] = $wc_lang;
-
 
         // If the site supports Gutenberg Blocks, support the Checkout block IOK 2020-08-10
         if (class_exists('Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType')) {
@@ -5583,6 +5584,18 @@ else:
 
     // Called in template_redirect before we get to the wait-for-payment page IOK 2026-09-21
     private function handle_payment_poll_and_redirect () {
+
+        // Because the new SDK still uses the old payment landing page in an iframe, we may get an extra return here. We should
+        // ignore that, as those iframes are going to be gone. IOK 2026-10-12
+        // Unless this *site* is in an iframe, in which case, go head. The "pw" argument stands for "parent window", it
+        // is added in our successhandlers, only.
+        $is_iframe = ($_SERVER['HTTP_SEC_FETCH_DEST'] ?? '') == 'iframe';
+        $parentframe = $_GET['pw'] ?? 0;
+        if ($is_iframe  && !$parentframe) {
+            print "ok";
+            exit();
+        }
+
         $orderid = WC()->session->get('_vipps_pending_order');
 
         $order = null;
